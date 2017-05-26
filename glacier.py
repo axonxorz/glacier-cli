@@ -33,14 +33,14 @@ import os.path
 import sys
 import time
 
-import boto.glacier
+import boto3
 import iso8601
 import sqlalchemy
 import sqlalchemy.ext.declarative
 import sqlalchemy.orm
 
 
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 
 # There is a lag between an archive being created and the archive
 # appearing on an inventory. Even if the inventory has an InventoryDate
@@ -127,9 +127,9 @@ class Cache(object):
         self.Session.configure(bind=self.engine)
         self.session = self.Session()
 
-    def add_archive(self, vault, name, id):
+    def add_archive(self, vault_name, name, archive):
         self.session.add(self.Archive(key=self.key,
-                                      vault=vault, name=name, id=id))
+                                      vault=vault_name, name=name, id=archive.id))
         self.session.commit()
 
     def _get_archive_query_by_ref(self, vault, ref):
@@ -318,8 +318,8 @@ class Cache(object):
         self.session.commit()
 
 
-def get_connection_account(connection):
-    """Return some account key associated with the connection.
+def get_cache_key():
+    """Return some account key associated with the session.
 
     This is used to key a cache, so that the same cache can serve multiple
     accounts. The only requirement is that multiple namespaces of vaults and/or
@@ -327,11 +327,12 @@ def get_connection_account(connection):
     this function. The cache will more more efficient if the same Glacier
     namespace sets always result in the same key.
     """
-    return connection.layer1.aws_access_key_id
+    # Note: the boto3 default session is used,so get the AWS access key from there
+    return boto3.DEFAULT_SESSION.get_credentials().access_key
 
 
 def find_retrieval_jobs(vault, archive_id):
-    return [job for job in vault.list_jobs() if job.archive_id == archive_id]
+    return [job for job in vault.jobs.all() if job.archive_id == archive_id]
 
 
 def find_inventory_jobs(vault, max_age_hours=0):
@@ -346,7 +347,7 @@ def find_inventory_jobs(vault, max_age_hours=0):
         def recent_enough(job):
             return not job.completed
 
-    return [job for job in vault.list_jobs()
+    return [job for job in vault.jobs.all()
             if job.action == 'InventoryRetrieval' and recent_enough(job)]
 
 
@@ -361,10 +362,10 @@ def has_pending_job(jobs):
 
 def update_job_list(jobs):
     for i, job in enumerate(jobs):
-        jobs[i] = job.vault.get_job(job.id)
+        job.reload()
 
 
-def job_oneline(conn, cache, vault, job):
+def job_oneline(resource, cache, vault, job):
     action_letter = {'ArchiveRetrieval': 'a',
                      'InventoryRetrieval': 'i'}[job.action]
     status_letter = {'InProgress': 'p',
@@ -402,21 +403,21 @@ def wait_until_job_completed(jobs, sleep=600, tries=144):
 
 class App(object):
     def job_list(self):
-        for vault in self.connection.list_vaults():
-            job_list = [job_oneline(self.connection,
+        for vault in self.resource.vaults.all():
+            job_list = [job_oneline(self.resource,
                                     self.cache,
                                     vault,
                                     job)
-                        for job in vault.list_jobs()]
+                        for job in vault.jobs.all()]
             if job_list:
                 print(*job_list, sep="\n")
 
     def vault_list(self):
-        print(*[vault.name for vault in self.connection.list_vaults()],
+        print(*[vault.name for vault in self.resource.vaults.all()],
                 sep="\n")
 
     def vault_create(self):
-        self.connection.create_vault(self.args.name)
+        self.resource.create_vault(vaultName=self.args.name)
 
     def _vault_sync_reconcile(self, vault, job, fix=False):
         response = job.get_output()
@@ -441,7 +442,7 @@ class App(object):
         self.cache.mark_commit()
 
     def _vault_sync(self, vault_name, max_age_hours, fix, wait):
-        vault = self.connection.get_vault(vault_name)
+        vault = self.resource.Vault('-', vault_name)
         inventory_jobs = find_inventory_jobs(vault,
                                              max_age_hours=max_age_hours)
 
@@ -455,8 +456,8 @@ class App(object):
                 raise RetryConsoleError('job still pending for inventory on %r' %
                                         vault.name)
         else:
-            job_id = vault.retrieve_inventory()
-            job = vault.get_job(job_id)
+            job_id = vault.initiate_inventory_retrieval()
+            job = vault.Job(job_id)
             if wait:
                 wait_until_job_completed([job])
                 self._vault_sync_reconcile(vault, job, fix=fix)
@@ -495,10 +496,12 @@ class App(object):
                 raise RuntimeError('Archive name not specified. Use --name')
             name = os.path.basename(full_name)
 
-        vault = self.connection.get_vault(self.args.vault)
-        archive_id = vault.create_archive_from_file(
-            file_obj=self.args.file, description=name)
-        self.cache.add_archive(self.args.vault, name, archive_id)
+        vault = self.resource.Vault('-', self.args.vault)
+        archive = vault.upload_archive(
+            archiveDescription=name,
+            body=self.args.file
+        )
+        self.cache.add_archive(self.args.vault, name, archive)
 
     @staticmethod
     def _write_archive_retrieval_job(f, job, multipart_size):
@@ -546,7 +549,7 @@ class App(object):
         except KeyError:
             raise ConsoleError('archive %r not found' % name)
 
-        vault = self.connection.get_vault(self.args.vault)
+        vault = self.resource.Vault('-', self.args.vault)
         retrieval_jobs = find_retrieval_jobs(vault, archive_id)
 
         complete_job = find_complete_job(retrieval_jobs)
@@ -560,7 +563,8 @@ class App(object):
                 raise RetryConsoleError('job still pending for archive %r' % name)
         else:
             # create an archive retrieval job
-            job = vault.retrieve_archive(archive_id)
+            archive = vault.Archive(archive_id)
+            job = archive.initiate_archive_retrieval()
             if self.args.wait:
                 wait_until_job_completed([job])
                 self._archive_retrieve_completed(self.args, job, name)
@@ -589,7 +593,7 @@ class App(object):
                 self.args.vault, self.args.name)
         except KeyError:
             raise ConsoleError('archive %r not found' % self.args.name)
-        vault = self.connection.get_vault(self.args.vault)
+        vault = self.resource.Vault('-', self.args.vault)
         vault.delete_archive(archive_id)
         self.cache.delete_archive(self.args.vault, self.args.name)
 
@@ -645,7 +649,7 @@ class App(object):
 
     def parse_args(self, args=None):
         parser = argparse.ArgumentParser()
-        parser.add_argument('--region', default='us-east-1')
+        parser.add_argument('--region', default=None)
         subparsers = parser.add_subparsers()
         vault_subparser = subparsers.add_parser('vault').add_subparsers()
         vault_subparser.add_parser('list').set_defaults(func=self.vault_list)
@@ -700,16 +704,16 @@ class App(object):
         job_subparser.add_parser('list').set_defaults(func=self.job_list)
         return parser.parse_args(args)
 
-    def __init__(self, args=None, connection=None, cache=None):
+    def __init__(self, args=None, resource=None, cache=None):
         args = self.parse_args(args)
 
-        if connection is None:
-            connection = boto.glacier.connect_to_region(args.region)
+        if resource is None:
+            resource = boto3.resource('glacier', region_name=args.region)
 
         if cache is None:
-            cache = Cache(get_connection_account(connection))
+            cache = Cache(get_cache_key())
 
-        self.connection = connection
+        self.resource = resource
         self.cache = cache
         self.args = args
 
