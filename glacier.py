@@ -616,7 +616,7 @@ class App(object):
         except KeyError:
             raise ConsoleError('archive %r not found' % self.args.name)
         vault = self.resource.Vault('-', self.args.vault)
-        vault.delete_archive(archive_id)
+        vault.Archive(archive_id).delete()
         self.cache.delete_archive(self.args.vault, self.args.name)
 
     def archive_checkpresent(self):
