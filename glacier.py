@@ -70,6 +70,15 @@ def warn(message):
           file=sys.stderr)
 
 
+def verbose(message):
+    pass
+
+
+def real_verbose(message):
+    print(insert_prefix_to_lines('%s: verbose: ' % PROGRAM_NAME, message),
+          file=sys.stderr)
+
+
 def mkdir_p(path):
     """Create path if it doesn't exist already"""
     try:
@@ -388,12 +397,14 @@ def job_oneline(resource, cache, vault, job):
 
 
 def wait_until_job_completed(jobs, sleep=600, tries=144):
+    max_tries = tries
     update_job_list(jobs)
     job = find_complete_job(jobs)
     while not job:
         tries -= 1
         if tries < 0:
             raise RuntimeError('Timed out waiting for job completion')
+        verbose('Job not completed, sleeping for {} seconds (Wait {} of {})'.format(sleep, max_tries-tries, max_tries))
         time.sleep(sleep)
         update_job_list(jobs)
         job = find_complete_job(jobs)
@@ -650,6 +661,7 @@ class App(object):
     def parse_args(self, args=None):
         parser = argparse.ArgumentParser()
         parser.add_argument('--region', default=None)
+        parser.add_argument('--verbose', action='store_true')
         subparsers = parser.add_subparsers()
         vault_subparser = subparsers.add_parser('vault').add_subparsers()
         vault_subparser.add_parser('list').set_defaults(func=self.vault_list)
@@ -705,7 +717,11 @@ class App(object):
         return parser.parse_args(args)
 
     def __init__(self, args=None, resource=None, cache=None):
+        global verbose
         args = self.parse_args(args)
+
+        if args.verbose:
+            verbose = real_verbose
 
         if resource is None:
             resource = boto3.resource('glacier', region_name=args.region)
