@@ -431,6 +431,14 @@ class App(object):
     def vault_create(self):
         self.resource.create_vault(vaultName=self.args.name)
 
+    def vault_delete(self):
+        all_vaults = self.resource.vaults.all()
+        for vault in all_vaults:
+            if vault.name == self.args.name:
+                vault.delete()
+                return True
+        raise RuntimeError('Could not find vault {}'.format(self.args.name))
+
     def _vault_sync_reconcile(self, vault, job, fix=False):
         job_output = job.get_output()
         response = job_output['body'].read()
@@ -671,6 +679,9 @@ class App(object):
         vault_create_subparser = vault_subparser.add_parser('create')
         vault_create_subparser.set_defaults(func=self.vault_create)
         vault_create_subparser.add_argument('name')
+        vault_delete_subparser = vault_subparser.add_parser('delete')
+        vault_delete_subparser.set_defaults(func=self.vault_delete)
+        vault_delete_subparser.add_argument('name')
         vault_sync_subparser = vault_subparser.add_parser('sync')
         vault_sync_subparser.set_defaults(func=self.vault_sync)
         vault_sync_subparser.add_argument('name', metavar='vault_name')
