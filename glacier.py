@@ -32,6 +32,7 @@ import os
 import os.path
 import sys
 import time
+import json
 
 import boto3
 import iso8601
@@ -431,7 +432,9 @@ class App(object):
         self.resource.create_vault(vaultName=self.args.name)
 
     def _vault_sync_reconcile(self, vault, job, fix=False):
-        response = job.get_output()
+        job_output = job.get_output()
+        response = job_output['body'].read()
+        response = json.loads(response)
         inventory_date = iso8601_to_unix_timestamp(response['InventoryDate'])
         job_creation_date = iso8601_to_unix_timestamp(job.creation_date)
         seen_ids = []
