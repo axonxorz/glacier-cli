@@ -41,8 +41,10 @@ import sqlalchemy
 import sqlalchemy.ext.declarative
 import sqlalchemy.orm
 
+from wrappedfile import WrappedFile
 
-__version__ = '0.2.0'
+
+__version__ = '0.3.0'
 
 # There is a lag between an archive being created and the archive
 # appearing on an inventory. Even if the inventory has an InventoryDate
@@ -107,6 +109,7 @@ def get_user_cache_dir():
     if home is None:
         raise RuntimeError('Cannot find user home directory')
     return os.path.join(home, '.cache')
+
 
 
 class Cache(object):
@@ -546,12 +549,11 @@ class App(object):
                 )
 
                 def _upload(start_byte, end_byte, chunk_num):
-                    verbose('Uploading bytes {}-{} (Chunk {} of {})'.format(start_byte, end_byte, chunk_num, chunks))
-                    file.seek(start_byte)
-                    data = file.read(end_byte - start_byte + 1)  # Must read data into memory
+                    verbose('Uploading bytes {}-{} (Chunk {} of {})'.format(start_byte, end_byte - 1, chunk_num, chunks))
+                    wrapped_reader = WrappedFile(file, start_byte, end_byte)
                     multipart.upload_part(
-                        range='bytes {}-{}/*'.format(start_byte, end_byte),
-                        body=data
+                        range='bytes {}-{}/*'.format(start_byte, end_byte - 1),
+                        body=wrapped_reader
                     )
 
                 whole_parts = file_size // multipart_size
@@ -561,9 +563,9 @@ class App(object):
                     chunks += 1
                 for chunk_num, first_byte in enumerate(xrange(0, whole_parts * multipart_size,
                                                              multipart_size)):
-                    _upload(first_byte, first_byte + multipart_size - 1, chunk_num=chunk_num+1)
+                    _upload(first_byte, first_byte + multipart_size, chunk_num=chunk_num+1)
                 if remainder:
-                    _upload(file_size-remainder, file_size - 1, chunk_num=chunks)
+                    _upload(file_size-remainder, file_size, chunk_num=chunks)
 
                 response = multipart.complete(
                     archiveSize=str(file_size),
@@ -571,8 +573,9 @@ class App(object):
                 )
                 archive = vault.Archive(response['archiveId'])
                 self.cache.add_archive(self.args.vault, name, archive)
+                verbose('Multipart upload complete')
             except Exception, e:
-                warn('Unhandled exception during multi-part upload: {}'.format(e))
+                warn('Unhandled exception during multi-part upload: {} {}'.format(type(e), e))
                 if multipart:
                     multipart.abort()
                     verbose('Multipart upload aborted')
