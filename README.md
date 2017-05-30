@@ -115,16 +115,12 @@ it costs](http://aws.amazon.com/glacier/pricing/). Note that archive retrieval
 costs are complicated and [may be a lot more than you
 expect](http://www.daemonology.net/blog/2012-09-04-thoughts-on-glacier-pricing.html).
 Files are uploaded in chunks, so uploading an archive can cause many
-requests.  The default size of the parts is determined by the boto library;
-check `DefaultPartSize` in
-[the documentation](http://boto.readthedocs.org/en/latest/ref/glacier.html#module-boto.glacier.vault).  [Changes have been proposed to this tool in order to allow the user
-to specify the chunk size, but they have not been merged
-yet.](https://github.com/basak/glacier-cli/pull/24)
+requests.  The default size of the parts is 32MB for uploads and 8MB for downloads.
 
 Installation
 ------------
 
-First ensure that [`boto`](https://github.com/boto/boto/) is installed
+First ensure that [`boto3`](https://github.com/boto/boto3/) is installed
 on your system.
 
 Then clone this repository:
@@ -276,9 +272,6 @@ Future Directions
 Contact
 -------
 
+* The original [glacier-cli github project](https://github.com/basak/glacier-cli) has not had commits since Feb 2016
 * For bugs or feature requests please create a [glacier-cli github
-  issue](https://github.com/basak/glacier-cli/issues).
-* Reach me on Twitter: [@robiebasak](https://twitter.com/robiebasak), but
-  please tweet me an email address (or a [reCAPTCHA
-  mailhide](http://www.google.com/recaptcha/mailhide/) URL, or some other way
-  for me to reply) if my reply is likely to take more than 140 characters!
+  issue](https://github.com/axonxorz/glacier-cli/issues).
