@@ -519,12 +519,63 @@ class App(object):
                 raise RuntimeError('Archive name not specified. Use --name')
             name = os.path.basename(full_name)
 
+        file = self.args.file
+        multipart_size = self.args.multipart_size
+        verbose('Uploading archive with multipart size={}'.format(multipart_size))
+        file.seek(0, 2)  # move to end of file
+        file_size = file.tell()
+        file.seek(0)
+        file_tree_hash = botocore.utils.calculate_tree_hash(file)
+        file.seek(0)
+
         vault = self.resource.Vault('-', self.args.vault)
-        archive = vault.upload_archive(
-            archiveDescription=name,
-            body=self.args.file
-        )
-        self.cache.add_archive(self.args.vault, name, archive)
+        if file_size < multipart_size:
+            verbose('Uploading in single upload')
+            archive = vault.upload_archive(
+                archiveDescription=name,
+                body=file
+            )
+            self.cache.add_archive(self.args.vault, name, archive)
+        else:
+            multipart = None
+            try:
+                verbose('Uploading in multi-part upload')
+                multipart = vault.initiate_multipart_upload(
+                    archiveDescription=name,
+                    partSize=str(multipart_size)
+                )
+
+                def _upload(start_byte, end_byte, chunk_num):
+                    verbose('Uploading bytes {}-{} (Chunk {} of {})'.format(start_byte, end_byte, chunk_num, chunks))
+                    file.seek(start_byte)
+                    data = file.read(end_byte - start_byte + 1)  # Must read data into memory
+                    multipart.upload_part(
+                        range='bytes {}-{}/*'.format(start_byte, end_byte),
+                        body=data
+                    )
+
+                whole_parts = file_size // multipart_size
+                chunks = whole_parts
+                remainder = file_size % multipart_size
+                if remainder:
+                    chunks += 1
+                for chunk_num, first_byte in enumerate(xrange(0, whole_parts * multipart_size,
+                                                             multipart_size)):
+                    _upload(first_byte, first_byte + multipart_size - 1, chunk_num=chunk_num+1)
+                if remainder:
+                    _upload(file_size-remainder, file_size - 1, chunk_num=chunks)
+
+                response = multipart.complete(
+                    archiveSize=str(file_size),
+                    checksum=file_tree_hash
+                )
+                archive = vault.Archive(response['archiveId'])
+                self.cache.add_archive(self.args.vault, name, archive)
+            except Exception, e:
+                warn('Unhandled exception during multi-part upload: {}'.format(e))
+                if multipart:
+                    multipart.abort()
+                    verbose('Multipart upload aborted')
 
     @staticmethod
     def _write_archive_retrieval_job(args, f, job, multipart_size):
@@ -716,6 +767,8 @@ class App(object):
         archive_upload_subparser.add_argument('file',
                                               type=argparse.FileType('rb'))
         archive_upload_subparser.add_argument('--name')
+        archive_upload_subparser.add_argument('--multipart-size', type=int,
+                default=(32*1024*1024))
         archive_retrieve_subparser = archive_subparser.add_parser('retrieve')
         archive_retrieve_subparser.set_defaults(func=self.archive_retrieve)
         archive_retrieve_subparser.add_argument('vault')
