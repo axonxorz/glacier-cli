@@ -34,6 +34,7 @@ import sys
 import time
 import json
 
+import botocore
 import boto3
 import iso8601
 import sqlalchemy
@@ -526,44 +527,59 @@ class App(object):
         self.cache.add_archive(self.args.vault, name, archive)
 
     @staticmethod
-    def _write_archive_retrieval_job(f, job, multipart_size):
-        if job.archive_size > multipart_size:
+    def _write_archive_retrieval_job(args, f, job, multipart_size):
+        if job.archive_size_in_bytes > multipart_size:
             def fetch(start, end):
                 byte_range = start, end-1
-                f.write(job.get_output(byte_range).read())
+                verbose('Fetching multipart byte range {}-{}'.format(*byte_range))
+                response = job.get_output(range='bytes={}-{}'.format(*byte_range))
+                data = response['body'].read()
+                f.write(data)
 
-            whole_parts = job.archive_size // multipart_size
+            whole_parts = job.archive_size_in_bytes // multipart_size
             for first_byte in xrange(0, whole_parts * multipart_size,
                                 multipart_size):
                 fetch(first_byte, first_byte + multipart_size)
-            remainder = job.archive_size % multipart_size
+            remainder = job.archive_size_in_bytes % multipart_size
             if remainder:
-                fetch(job.archive_size - remainder, job.archive_size)
+                fetch(job.archive_size_in_bytes - remainder, job.archive_size_in_bytes)
         else:
-            f.write(job.get_output().read())
+            verbose('Fetching entire byte range')
+            response = job.get_output()
+            f.write(response['body'].read())
 
         # Make sure that the file now exactly matches the downloaded archive,
         # even if the file existed before and was longer.
         try:
-            f.truncate(job.archive_size)
+            f.truncate(job.archive_size_in_bytes)
         except IOError as e:
             # Allow ESPIPE, since the "file" couldn't have existed before in
             # this case.
             if e.errno != errno.ESPIPE:
                 raise
 
+        f.flush()
+
+        # Verify tree hash to make sure we have the full content uncorrupted
+        if args.output_filename != '-':
+            if botocore.utils.calculate_tree_hash(open(f.name, 'rb')) != job.sha256_tree_hash:
+                raise ConsoleError('SHA256 Tree Hash does not match Glacier Archive. Download is likely corrupt.')
+        else:
+            warn("File saved to stdout cannot have it's SHA256 Tree Hash verified")
+
+
     @classmethod
     def _archive_retrieve_completed(cls, args, job, name):
         if args.output_filename == '-':
             cls._write_archive_retrieval_job(
-                sys.stdout, job, args.multipart_size)
+                args, sys.stdout, job, args.multipart_size)
         else:
             if args.output_filename:
                 filename = args.output_filename
             else:
                 filename = os.path.basename(name)
             with open(filename, 'wb') as f:
-                cls._write_archive_retrieval_job(f, job, args.multipart_size)
+                cls._write_archive_retrieval_job(args, f, job, args.multipart_size)
 
     def archive_retrieve_one(self, name):
         try:
@@ -757,6 +773,10 @@ class App(object):
             #     "temp failure; user is invited to retry"
             sys.exit(75)  # EX_TEMPFAIL
         except ConsoleError as e:
+            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', e.message)
+            print(message, file=sys.stderr)
+            sys.exit(1)
+        except RuntimeError as e:
             message = insert_prefix_to_lines(PROGRAM_NAME + ': ', e.message)
             print(message, file=sys.stderr)
             sys.exit(1)
