@@ -583,20 +583,23 @@ class App(object):
     @staticmethod
     def _write_archive_retrieval_job(args, f, job, multipart_size):
         if job.archive_size_in_bytes > multipart_size:
-            def fetch(start, end):
+
+            def fetch(start, end, chunk_num):
                 byte_range = start, end-1
-                verbose('Fetching multipart byte range {}-{}'.format(*byte_range))
+                verbose('Fetching multipart byte range {}-{} (Chunk {} of {})'.format(byte_range[0], byte_range[1], chunk_num, chunks))
                 response = job.get_output(range='bytes={}-{}'.format(*byte_range))
                 data = response['body'].read()
                 f.write(data)
 
             whole_parts = job.archive_size_in_bytes // multipart_size
-            for first_byte in xrange(0, whole_parts * multipart_size,
-                                multipart_size):
-                fetch(first_byte, first_byte + multipart_size)
+            chunks = whole_parts
             remainder = job.archive_size_in_bytes % multipart_size
             if remainder:
-                fetch(job.archive_size_in_bytes - remainder, job.archive_size_in_bytes)
+                chunks += 1
+            for chunk_num, first_byte in enumerate(xrange(0, whole_parts * multipart_size, multipart_size)):
+                fetch(first_byte, first_byte + multipart_size, chunk_num=chunk_num+1)
+            if remainder:
+                fetch(job.archive_size_in_bytes - remainder, job.archive_size_in_bytes, chunk_num=chunks)
         else:
             verbose('Fetching entire byte range')
             response = job.get_output()
