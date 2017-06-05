@@ -105,10 +105,10 @@ class Cache(object):
     Base = sqlalchemy.ext.declarative.declarative_base()
     class Archive(Base):
         __tablename__ = 'archive'
-        id = sqlalchemy.Column(sqlalchemy.String, primary_key=True)
-        name = sqlalchemy.Column(sqlalchemy.String)
-        vault = sqlalchemy.Column(sqlalchemy.String, nullable=False)
-        key = sqlalchemy.Column(sqlalchemy.String, nullable=False)
+        id = sqlalchemy.Column(sqlalchemy.String(255), primary_key=True)
+        name = sqlalchemy.Column(sqlalchemy.String(255))
+        vault = sqlalchemy.Column(sqlalchemy.String(255), nullable=False)
+        key = sqlalchemy.Column(sqlalchemy.String(255), nullable=False)
         last_seen_upstream = sqlalchemy.Column(sqlalchemy.Integer)
         created_here = sqlalchemy.Column(sqlalchemy.Integer)
         deleted_here = sqlalchemy.Column(sqlalchemy.Integer)
