@@ -42,7 +42,7 @@ import sqlalchemy.ext.declarative
 import sqlalchemy.orm
 
 from wrappedfile import WrappedFile
-from configuration import get_user_cache_dir
+from configuration import configuration, get_user_cache_dir
 
 
 __version__ = '0.3.0'
@@ -119,13 +119,14 @@ class Cache(object):
 
     Session = sqlalchemy.orm.sessionmaker()
 
-    def __init__(self, key, db_path=None):
+    def __init__(self, key, db_driver):
         self.key = key
-        if db_path is None:
-            db_path = os.path.join(get_user_cache_dir(), 'glacier-cli', 'db')
-        if db_path != ':memory:':
+        if 'sqlite://' in db_driver:
+            db_path = db_driver[len('sqlite://'):]
             mkdir_p(os.path.dirname(db_path))
-        self.engine = sqlalchemy.create_engine('sqlite:///%s' % db_path)
+            self.engine = sqlalchemy.create_engine('sqlite:///%s' % db_path)
+        else:
+            self.engine = sqlalchemy.create_engine(db_driver)
         self.Base.metadata.create_all(self.engine)
         self.Session.configure(bind=self.engine)
         self.session = self.Session()
@@ -733,6 +734,7 @@ class App(object):
 
     def parse_args(self, args=None):
         parser = argparse.ArgumentParser()
+        parser.add_argument('--config', help='configuration INI file to use', default=None)
         parser.add_argument('--region', default=None)
         parser.add_argument('--verbose', action='store_true')
         subparsers = parser.add_subparsers()
@@ -798,6 +800,8 @@ class App(object):
         global verbose
         args = self.parse_args(args)
 
+        configuration.read(args.config)
+
         if args.verbose:
             verbose = real_verbose
 
@@ -805,7 +809,7 @@ class App(object):
             resource = boto3.resource('glacier', region_name=args.region)
 
         if cache is None:
-            cache = Cache(get_cache_key())
+            cache = Cache(get_cache_key(), configuration['database']['driver'])
 
         self.resource = resource
         self.cache = cache
