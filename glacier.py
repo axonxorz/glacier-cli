@@ -42,6 +42,7 @@ import sqlalchemy.ext.declarative
 import sqlalchemy.orm
 
 from wrappedfile import WrappedFile
+from configuration import get_user_cache_dir
 
 
 __version__ = '0.3.0'
@@ -98,18 +99,6 @@ def insert_prefix_to_lines(prefix, lines):
 
 def iso8601_to_unix_timestamp(iso8601_date_str):
     return calendar.timegm(iso8601.parse_date(iso8601_date_str).utctimetuple())
-
-
-def get_user_cache_dir():
-    xdg_cache_home = os.getenv('XDG_CACHE_HOME')
-    if xdg_cache_home is not None:
-        return xdg_cache_home
-
-    home = os.getenv('HOME')
-    if home is None:
-        raise RuntimeError('Cannot find user home directory')
-    return os.path.join(home, '.cache')
-
 
 
 class Cache(object):
