@@ -49,16 +49,16 @@ install_requires = read_requirements("requirements.txt")
 tests_require = read_requirements("requirements-tests.txt")
 
 setup(
-    name='glacier-cli',
-    version=find_version('glacier.py'),
+    name='glacier',
+    version=find_version('glacier/__init__.py'),
     description='A sysadmin-friendly command line interface to Amazon Glacier.',
     long_description=read('README.md'),
-    url='https://github.com/basak/glacier-cli',
-    author='https://github.com/basak',
+    url='https://github.com/axonxorz/glacier-cli',
+    author='https://github.com/axonxorz',
     license='MIT License',
     install_requires=install_requires,
     tests_require=tests_require,
     test_suite = 'nose.collector',
     py_modules=['glacier'],
-    entry_points={'console_scripts': ['glacier-cli=glacier:main']}
+    entry_points={'console_scripts': ['glacier=glacier.cli:main']}
 )

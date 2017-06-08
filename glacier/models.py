@@ -11,12 +11,22 @@ import sqlalchemy.orm
 from utils import mkdir_p
 
 
+# There is a lag between an archive being created and the archive
+# appearing on an inventory. Even if the inventory has an InventoryDate
+# of after the archive was created, it still doesn't necessarily appear.
+# So only warn of a missing archive if the archive still hasn't appeared
+# on an inventory created INVENTORY_LAG seconds after the archive was
+# uploaded successfully.
+INVENTORY_LAG = 24 * 60 * 60 * 3
+
+
 class Cache(object):
     Base = sqlalchemy.ext.declarative.declarative_base()
     class Archive(Base):
         __tablename__ = 'archive'
         id = sqlalchemy.Column(sqlalchemy.String(255), primary_key=True)
         name = sqlalchemy.Column(sqlalchemy.String(255))
+        size = sqlalchemy.Column(sqlalchemy.Integer)
         vault = sqlalchemy.Column(sqlalchemy.String(255), nullable=False)
         key = sqlalchemy.Column(sqlalchemy.String(255), nullable=False)
         last_seen_upstream = sqlalchemy.Column(sqlalchemy.Integer)
