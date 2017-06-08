@@ -42,6 +42,7 @@ import iso8601
 from wrappedfile import WrappedFile
 from configuration import configuration, get_user_cache_dir
 from models import Cache
+from utils import validate_multipart_bytes
 
 
 PROGRAM_NAME = 'glacier'
@@ -257,6 +258,7 @@ class App(object):
 
         file = self.args.file
         multipart_size = self.args.multipart_size
+        validate_multipart_bytes(multipart_size)
         logger.debug('Uploading archive with multipart size={}'.format(multipart_size))
         file.seek(0, 2)  # move to end of file
         file_size = file.tell()
@@ -315,6 +317,7 @@ class App(object):
 
     @staticmethod
     def _write_archive_retrieval_job(args, f, job, multipart_size):
+        validate_multipart_bytes(multipart_size)
         if job.archive_size_in_bytes > multipart_size:
 
             def fetch(start, end, chunk_num):

@@ -1,6 +1,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import math
 import os
 import errno
 
@@ -12,3 +13,13 @@ def mkdir_p(path):
     except OSError as e:
         if e.errno != errno.EEXIST:
             raise
+
+
+def validate_multipart_bytes(num_bytes):
+    """Amazon requires multipart uploads/downloads to be in multiples of
+    1MB powers of 2 (ie: 1MB, 2MB, 4MB, 8MB, 16MB, 32MB, etc), up to 4GB"""
+    error = ValueError('Part size must be a power of two and be between 1048576 and 4294967296 bytes.')
+    if num_bytes < 1024**2 or num_bytes > (1024**2)*4096:
+        raise error
+    if not math.log(num_bytes, 2).is_integer():
+        raise error
