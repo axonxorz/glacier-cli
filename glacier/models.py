@@ -20,8 +20,9 @@ from utils import mkdir_p
 INVENTORY_LAG = 24 * 60 * 60 * 3
 
 
+Base = sqlalchemy.ext.declarative.declarative_base()
+
 class Cache(object):
-    Base = sqlalchemy.ext.declarative.declarative_base()
     class Archive(Base):
         __tablename__ = 'archive'
         id = sqlalchemy.Column(sqlalchemy.String(255), primary_key=True)
@@ -47,7 +48,7 @@ class Cache(object):
             self.engine = sqlalchemy.create_engine('sqlite:///%s' % db_path)
         else:
             self.engine = sqlalchemy.create_engine(db_driver)
-        self.Base.metadata.create_all(self.engine)
+        Base.metadata.create_all(self.engine)
         self.Session.configure(bind=self.engine)
         self.session = self.Session()
 
