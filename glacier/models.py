@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import os
 import os.path
 import time
+import logging
 
 import sqlalchemy
 import sqlalchemy.ext.declarative
@@ -20,6 +21,7 @@ from utils import mkdir_p
 # uploaded successfully.
 INVENTORY_LAG = 24 * 60 * 60 * 3
 
+logger = logging.getLogger(__name__)
 
 Base = sqlalchemy.ext.declarative.declarative_base()
 
@@ -53,9 +55,10 @@ class Cache(object):
         self.Session.configure(bind=self.engine)
         self.session = self.Session()
 
-    def add_archive(self, vault_name, name, archive):
+    def add_archive(self, vault_name, name, size, archive):
         self.session.add(self.Archive(key=self.key,
-                                      vault=vault_name, name=name, id=archive.id))
+                                      vault=vault_name, name=name, size=size,
+                                      id=archive.id))
         self.session.commit()
 
     def _get_archive_query_by_ref(self, vault, ref):
@@ -149,7 +152,7 @@ class Cache(object):
                 ])
 
     def mark_seen_upstream(
-            self, vault, id, name, upstream_creation_date,
+            self, vault, id, name, size, upstream_creation_date,
             upstream_inventory_date, upstream_inventory_job_creation_date,
             fix=False):
 
@@ -186,7 +189,7 @@ class Cache(object):
         except sqlalchemy.orm.exc.NoResultFound:
             self.session.add(
                 self.Archive(
-                    key=self.key, vault=vault, name=name, id=id,
+                    key=self.key, vault=vault, name=name, size=size, id=id,
                     last_seen_upstream=last_seen_upstream
                     )
                 )
@@ -195,19 +198,19 @@ class Cache(object):
                 archive.name = name
             elif archive.name != name:
                 if fix:
-                    warn('archive %r appears to have changed name from %r ' %
+                    logger.warn('archive %r appears to have changed name from %r ' %
                          (archive.id, archive.name) + 'to %r (fixed)' % (name))
                     archive.name = name
                 else:
-                    warn('archive %r appears to have changed name from %r ' %
+                    logger.warn('archive %r appears to have changed name from %r ' %
                          (archive.id, archive.name) + 'to %r' % (name))
             if archive.deleted_here:
                 archive_ref = self._archive_ref(archive)
                 if archive.deleted_here < upstream_inventory_date:
-                    warn('archive %r marked deleted but still present' %
+                    logger.warn('archive %r marked deleted but still present' %
                          archive_ref)
                 else:
-                    warn('archive %r deletion not yet in inventory' %
+                    logger.warn('archive %r deletion not yet in inventory' %
                          archive_ref)
             archive.last_seen_upstream = last_seen_upstream
 
@@ -225,7 +228,7 @@ class Cache(object):
             archive_ref = self._archive_ref(archive)
             if archive.deleted_here and archive.deleted_here < inventory_date:
                 self.session.delete(archive)
-                info('deleted archive %r has left inventory; ' % archive_ref +
+                logger.info('deleted archive %r has left inventory; ' % archive_ref +
                      'removed from cache')
             elif not archive.deleted_here and (
                   archive.last_seen_upstream or
@@ -233,12 +236,12 @@ class Cache(object):
                      archive.created_here < inventory_date - INVENTORY_LAG)):
                 if fix:
                     self.session.delete(archive)
-                    warn('archive disappeared: %r (removed from cache)' %
+                    logger.warn('archive disappeared: %r (removed from cache)' %
                          archive_ref)
                 else:
-                    warn('archive disappeared: %r' % archive_ref)
+                    logger.warn('archive disappeared: %r' % archive_ref)
             else:
-                warn('new archive not yet in inventory: %r' % archive_ref)
+                logger.warn('new archive not yet in inventory: %r' % archive_ref)
 
     def mark_commit(self):
         self.session.commit()

@@ -33,6 +33,7 @@ import os.path
 import sys
 import time
 import json
+import logging
 
 import botocore
 import boto3
@@ -45,6 +46,8 @@ from models import Cache
 
 PROGRAM_NAME = 'glacier'
 
+logger = logging.getLogger(PROGRAM_NAME)
+
 class ConsoleError(RuntimeError):
     def __init__(self, m):
         super(ConsoleError, self).__init__(m)
@@ -53,33 +56,8 @@ class ConsoleError(RuntimeError):
 class RetryConsoleError(ConsoleError): pass
 
 
-def info(message):
-    print(insert_prefix_to_lines('%s: info: ' % PROGRAM_NAME, message),
-          file=sys.stderr)
-
-
-def warn(message):
-    print(insert_prefix_to_lines('%s: warning: ' % PROGRAM_NAME, message),
-          file=sys.stderr)
-
-
-def verbose(message):
-    pass
-
-
-def real_verbose(message):
-    print(insert_prefix_to_lines('%s: verbose: ' % PROGRAM_NAME, message),
-          file=sys.stderr)
-
-
-def insert_prefix_to_lines(prefix, lines):
-    return "\n".join([prefix + line for line in lines.split("\n")])
-
-
 def iso8601_to_unix_timestamp(iso8601_date_str):
     return calendar.timegm(iso8601.parse_date(iso8601_date_str).utctimetuple())
-
-
 
 
 def get_cache_key():
@@ -159,7 +137,7 @@ def wait_until_job_completed(jobs, sleep=600, tries=144):
         tries -= 1
         if tries < 0:
             raise RuntimeError('Timed out waiting for job completion')
-        verbose('Job not completed, sleeping for {} seconds (Wait {} of {})'.format(sleep, max_tries-tries, max_tries))
+        logger.debug('Job not completed, sleeping for {} seconds (Wait {} of {})'.format(sleep, max_tries-tries, max_tries))
         time.sleep(sleep)
         update_job_list(jobs)
         job = find_complete_job(jobs)
@@ -277,7 +255,7 @@ class App(object):
 
         file = self.args.file
         multipart_size = self.args.multipart_size
-        verbose('Uploading archive with multipart size={}'.format(multipart_size))
+        logger.debug('Uploading archive with multipart size={}'.format(multipart_size))
         file.seek(0, 2)  # move to end of file
         file_size = file.tell()
         file.seek(0)
@@ -286,7 +264,7 @@ class App(object):
 
         vault = self.resource.Vault('-', self.args.vault)
         if file_size < multipart_size:
-            verbose('Uploading in single upload')
+            logger.debug('Uploading in single upload')
             archive = vault.upload_archive(
                 archiveDescription=name,
                 body=file
@@ -295,14 +273,14 @@ class App(object):
         else:
             multipart = None
             try:
-                verbose('Uploading in multi-part upload')
+                logger.debug('Uploading in multi-part upload')
                 multipart = vault.initiate_multipart_upload(
                     archiveDescription=name,
                     partSize=str(multipart_size)
                 )
 
                 def _upload(start_byte, end_byte, chunk_num):
-                    verbose('Uploading bytes {}-{} (Chunk {} of {})'.format(start_byte, end_byte - 1, chunk_num, chunks))
+                    logger.debug('Uploading bytes {}-{} (Chunk {} of {})'.format(start_byte, end_byte - 1, chunk_num, chunks))
                     wrapped_reader = WrappedFile(file, start_byte, end_byte)
                     multipart.upload_part(
                         range='bytes {}-{}/*'.format(start_byte, end_byte - 1),
@@ -326,12 +304,12 @@ class App(object):
                 )
                 archive = vault.Archive(response['archiveId'])
                 self.cache.add_archive(self.args.vault, name, archive)
-                verbose('Multipart upload complete')
+                logger.debug('Multipart upload complete')
             except Exception, e:
-                warn('Unhandled exception during multi-part upload: {} {}'.format(type(e), e))
+                logger.warn('Unhandled exception during multi-part upload: {} {}'.format(type(e), e))
                 if multipart:
                     multipart.abort()
-                    verbose('Multipart upload aborted')
+                    logger.debug('Multipart upload aborted')
 
     @staticmethod
     def _write_archive_retrieval_job(args, f, job, multipart_size):
@@ -339,7 +317,7 @@ class App(object):
 
             def fetch(start, end, chunk_num):
                 byte_range = start, end-1
-                verbose('Fetching multipart byte range {}-{} (Chunk {} of {})'.format(byte_range[0], byte_range[1], chunk_num, chunks))
+                logger.debug('Fetching multipart byte range {}-{} (Chunk {} of {})'.format(byte_range[0], byte_range[1], chunk_num, chunks))
                 response = job.get_output(range='bytes={}-{}'.format(*byte_range))
                 data = response['body'].read()
                 f.write(data)
@@ -354,7 +332,7 @@ class App(object):
             if remainder:
                 fetch(job.archive_size_in_bytes - remainder, job.archive_size_in_bytes, chunk_num=chunks)
         else:
-            verbose('Fetching entire byte range')
+            logger.debug('Fetching entire byte range')
             response = job.get_output()
             f.write(response['body'].read())
 
@@ -375,7 +353,7 @@ class App(object):
             if botocore.utils.calculate_tree_hash(open(f.name, 'rb')) != job.sha256_tree_hash:
                 raise ConsoleError('SHA256 Tree Hash does not match Glacier Archive. Download is likely corrupt.')
         else:
-            warn("File saved to stdout cannot have it's SHA256 Tree Hash verified")
+            logger.warn("File saved to stdout cannot have it's SHA256 Tree Hash verified")
 
 
     @classmethod
@@ -497,9 +475,9 @@ class App(object):
 
     def parse_args(self, args=None):
         parser = argparse.ArgumentParser()
-        parser.add_argument('--config', help='configuration INI file to use', default=None)
-        parser.add_argument('--region', default=None)
-        parser.add_argument('--verbose', action='store_true')
+        parser.add_argument('-c', '--config', help='configuration INI file to use', default=None)
+        parser.add_argument('-r', '--region', default=None)
+        parser.add_argument('-v', '--verbose', action='count', help='Increase verbosity by 1 level. 1 will show verbose application messages. 2 will show library messages (boto3, botocore, etc)')
         subparsers = parser.add_subparsers()
         config_subparser = subparsers.add_parser('config').add_subparsers()
         config_subparser.add_parser('write_default').set_defaults(func=self.write_default_config)
@@ -564,11 +542,22 @@ class App(object):
     def __init__(self, args=None, resource=None, cache=None):
         global verbose
         args = self.parse_args(args)
-
         configuration.read(args.config)
 
-        if args.verbose:
-            verbose = real_verbose
+        log_level = logging.INFO
+        if args.verbose > 0:
+            log_level = logging.DEBUG
+
+        logging.basicConfig(level=log_level,
+                            format='%(name)s:%(levelname)s: %(message)s',
+                            stream=sys.stderr)
+
+
+        if args.verbose < 2:
+            # Mute other module loggers
+            for logger_name in ['boto3', 'botocore', 'iso8601']:
+                mute_logger = logging.getLogger(logger_name)
+                mute_logger.setLevel(logging.ERROR)
 
         if resource is None:
             resource = boto3.resource('glacier', region_name=args.region)
@@ -586,18 +575,15 @@ class App(object):
         except KeyboardInterrupt:
             sys.exit(130)  # Interrupted with CTRL+C
         except RetryConsoleError as e:
-            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', str(e))
-            print(message, file=sys.stderr)
+            logger.warn(str(e))
             # From sysexits.h:
             #     "temp failure; user is invited to retry"
             sys.exit(75)  # EX_TEMPFAIL
         except ConsoleError as e:
-            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', str(e))
-            print(message, file=sys.stderr)
+            logger.error(str(e))
             sys.exit(1)
         except RuntimeError as e:
-            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', str(e))
-            print(message, file=sys.stderr)
+            logger.error(str(e))
             sys.exit(1)
 
 
