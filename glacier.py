@@ -594,17 +594,17 @@ class App(object):
         try:
             self.args.func()
         except RetryConsoleError as e:
-            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', e.message)
+            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', str(e))
             print(message, file=sys.stderr)
             # From sysexits.h:
             #     "temp failure; user is invited to retry"
             sys.exit(75)  # EX_TEMPFAIL
         except ConsoleError as e:
-            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', e.message)
+            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', str(e))
             print(message, file=sys.stderr)
             sys.exit(1)
         except RuntimeError as e:
-            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', e.message)
+            message = insert_prefix_to_lines(PROGRAM_NAME + ': ', str(e))
             print(message, file=sys.stderr)
             sys.exit(1)
 
