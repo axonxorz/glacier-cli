@@ -204,6 +204,16 @@ class Cache(object):
                 else:
                     logger.warn('archive %r appears to have changed name from %r ' %
                          (archive.id, archive.name) + 'to %r' % (name))
+            if not archive.size:
+                archive.size = size
+            elif archive.size != size:
+                if fix:
+                    logger.warn('archive %r appears to have changed size from %r ' %
+                         (archive.id, archive.size) + 'to %r (fixed)' % (size))
+                    archive.size = size
+                else:
+                    logger.warn('archive %r appears to have changed size from %r ' %
+                         (archive.id, archive.size) + 'to %r' % (size))
             if archive.deleted_here:
                 archive_ref = self._archive_ref(archive)
                 if archive.deleted_here < upstream_inventory_date:

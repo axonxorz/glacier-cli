@@ -184,11 +184,13 @@ class App(object):
         for archive in response['ArchiveList']:
             id = archive['ArchiveId']
             name = archive['ArchiveDescription']
+            size = archive['Size']
             creation_date = iso8601_to_unix_timestamp(archive['CreationDate'])
             self.cache.mark_seen_upstream(
                 vault=vault.name,
                 id=id,
                 name=name,
+                size=size,
                 upstream_creation_date=creation_date,
                 upstream_inventory_date=inventory_date,
                 upstream_inventory_job_creation_date=job_creation_date,
@@ -269,7 +271,7 @@ class App(object):
                 archiveDescription=name,
                 body=file
             )
-            self.cache.add_archive(self.args.vault, name, archive)
+            self.cache.add_archive(self.args.vault, name, file_size, archive)
         else:
             multipart = None
             try:
@@ -303,7 +305,7 @@ class App(object):
                     checksum=file_tree_hash
                 )
                 archive = vault.Archive(response['archiveId'])
-                self.cache.add_archive(self.args.vault, name, archive)
+                self.cache.add_archive(self.args.vault, name, file_size, archive)
                 logger.debug('Multipart upload complete')
             except Exception, e:
                 logger.warn('Unhandled exception during multi-part upload: {} {}'.format(type(e), e))
