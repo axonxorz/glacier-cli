@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import os
 import os.path
 import time
+import itertools
 import logging
 
 import sqlalchemy

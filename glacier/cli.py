@@ -27,7 +27,6 @@ from __future__ import unicode_literals
 import argparse
 import calendar
 import errno
-import itertools
 import os
 import os.path
 import sys
