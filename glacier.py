@@ -82,15 +82,6 @@ def real_verbose(message):
           file=sys.stderr)
 
 
-def mkdir_p(path):
-    """Create path if it doesn't exist already"""
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
-
-
 def insert_prefix_to_lines(prefix, lines):
     return "\n".join([prefix + line for line in lines.split("\n")])
 
