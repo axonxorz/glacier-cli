@@ -33,6 +33,7 @@ import sys
 import time
 import json
 import logging
+from datetime import datetime
 
 import botocore
 import boto3
@@ -239,6 +240,16 @@ class App(object):
 
         if archive_list:
             print(*archive_list, sep="\n")
+
+    def archive_ls(self):
+        """List archives in a vault with more consistent output"""
+        archive_list = self.cache.get_archive_list_objects(self.args.vault)
+        for archive in archive_list:
+            print('id:{} {} {} {}'.format(archive.id,
+                                          archive.size,
+                                          datetime.fromtimestamp(archive.modified),
+                                          archive.name))
+
 
     def archive_upload(self):
         # XXX: "Leading whitespace in archive descriptions is removed."
@@ -505,6 +516,9 @@ class App(object):
         archive_list_subparser.set_defaults(func=self.archive_list)
         archive_list_subparser.add_argument('--force-ids', action='store_true')
         archive_list_subparser.add_argument('vault')
+        archive_ls_subparser = archive_subparser.add_parser('ls')
+        archive_ls_subparser.set_defaults(func=self.archive_ls)
+        archive_ls_subparser.add_argument('vault')
         archive_upload_subparser = archive_subparser.add_parser('upload')
         archive_upload_subparser.set_defaults(func=self.archive_upload)
         archive_upload_subparser.add_argument('vault')

@@ -42,6 +42,15 @@ class Cache(object):
             self.created_here = time.time()
             super(Cache.Archive, self).__init__(*args, **kwargs)
 
+        @property
+        def modified(self):
+            """Return best estimate for last modification (or creation/deletion) date"""
+            if self.deleted_here is not None:
+                return self.deleted_here
+            if self.created_here is not None:
+                return self.created_here
+            return last_seen_upstream
+
     Session = sqlalchemy.orm.sessionmaker()
 
     def __init__(self, key, db_driver):
@@ -112,7 +121,7 @@ class Cache(object):
         else:
             return 'id:' + archive.id
 
-    def _get_archive_list_objects(self, vault):
+    def get_archive_list_objects(self, vault):
         for archive in (
                 self.session.query(self.Archive).
                              filter_by(key=self.key,
@@ -130,7 +139,7 @@ class Cache(object):
 
         for archive_name, archive_iterator in (
                 itertools.groupby(
-                    self._get_archive_list_objects(vault),
+                    self.get_archive_list_objects(vault),
                     lambda archive: archive.name)):
             # Yield self._archive_ref(..., force_id=True) if there is more than
             # one archive with the same name; otherwise use force_id=False.
@@ -146,7 +155,7 @@ class Cache(object):
                     yield force_id(subsequent_archive)
 
     def get_archive_list_with_ids(self, vault):
-        for archive in self._get_archive_list_objects(vault):
+        for archive in self.get_archive_list_objects(vault):
             yield "\t".join([
                 self._archive_ref(archive, force_id=True),
                 "%s" % archive.name,
