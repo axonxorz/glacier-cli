@@ -583,6 +583,8 @@ class App(object):
     def main(self):
         try:
             self.args.func()
+        except KeyboardInterrupt:
+            sys.exit(130)  # Interrupted with CTRL+C
         except RetryConsoleError as e:
             message = insert_prefix_to_lines(PROGRAM_NAME + ': ', str(e))
             print(message, file=sys.stderr)
