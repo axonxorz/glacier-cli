@@ -57,7 +57,7 @@ PROGRAM_NAME = 'glacier'
 
 class ConsoleError(RuntimeError):
     def __init__(self, m):
-        self.message = m
+        super(ConsoleError, self).__init__(m)
 
 
 class RetryConsoleError(ConsoleError): pass
