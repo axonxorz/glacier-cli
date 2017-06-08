@@ -1,18 +1,11 @@
 import os
-import errno
+import os.path
 
 import sqlalchemy
 import sqlalchemy.ext.declarative
 import sqlalchemy.orm
 
-
-def mkdir_p(path):
-    """Create path if it doesn't exist already"""
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
+from utils import mkdir_p
 
 
 class Cache(object):
