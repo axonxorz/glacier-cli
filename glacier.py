@@ -178,6 +178,9 @@ def wait_until_job_completed(jobs, sleep=600, tries=144):
 
 
 class App(object):
+    def write_default_config(self):
+        configuration.write_default()
+
     def job_list(self):
         for vault in self.resource.vaults.all():
             job_list = [job_oneline(self.resource,
@@ -508,6 +511,8 @@ class App(object):
         parser.add_argument('--region', default=None)
         parser.add_argument('--verbose', action='store_true')
         subparsers = parser.add_subparsers()
+        config_subparser = subparsers.add_parser('config').add_subparsers()
+        config_subparser.add_parser('write_default').set_defaults(func=self.write_default_config)
         vault_subparser = subparsers.add_parser('vault').add_subparsers()
         vault_subparser.add_parser('list').set_defaults(func=self.vault_list)
         vault_create_subparser = vault_subparser.add_parser('create')
