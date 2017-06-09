@@ -34,7 +34,7 @@ def get_user_config_dir():
 class Configuration(object):
 
     DEFAULT_CONFIG = """[database]
-driver=sqlite://%(user_cache_dir)s/db'
+driver=sqlite:///%(user_cache_dir)s/glacier-cli/db.sqlite
 """
     config = None
 

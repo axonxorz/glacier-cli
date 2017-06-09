@@ -56,7 +56,7 @@ class Cache(object):
     def __init__(self, key, db_driver):
         self.key = key
         if 'sqlite://' in db_driver:
-            db_path = db_driver[len('sqlite://'):]
+            db_path = db_driver[len('sqlite:///'):]
             mkdir_p(os.path.dirname(db_path))
             self.engine = sqlalchemy.create_engine('sqlite:///%s' % db_path)
         else:
