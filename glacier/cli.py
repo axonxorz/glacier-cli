@@ -38,6 +38,7 @@ from datetime import datetime
 import botocore
 import boto3
 import iso8601
+import sqlalchemy.exc
 
 from wrappedfile import WrappedFile
 from configuration import configuration, get_user_cache_dir
@@ -149,6 +150,9 @@ def wait_until_job_completed(jobs, sleep=600, tries=144):
 class App(object):
     def write_default_config(self):
         configuration.write_default()
+
+    def upgrade_database(self):
+        self.cache.upgrade_schema()
 
     def job_list(self):
         for vault in self.resource.vaults.all():
@@ -496,6 +500,7 @@ class App(object):
         subparsers = parser.add_subparsers()
         config_subparser = subparsers.add_parser('config').add_subparsers()
         config_subparser.add_parser('write_default').set_defaults(func=self.write_default_config)
+        config_subparser.add_parser('upgrade_database').set_defaults(func=self.upgrade_database)
         vault_subparser = subparsers.add_parser('vault').add_subparsers()
         vault_subparser.add_parser('list').set_defaults(func=self.vault_list)
         vault_create_subparser = vault_subparser.add_parser('create')
@@ -603,6 +608,9 @@ class App(object):
         except RuntimeError as e:
             logger.error(str(e))
             sys.exit(1)
+        except sqlalchemy.exc.OperationalError as e:
+            logger.error(str(e))
+            logger.error("Your database may be out of date. Run '{} config upgrade_database' to update.".format(sys.argv[0]))
 
 
 def main():

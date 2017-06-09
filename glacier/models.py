@@ -6,10 +6,13 @@ import os.path
 import time
 import itertools
 import logging
+import pkg_resources
 
 import sqlalchemy
 import sqlalchemy.ext.declarative
 import sqlalchemy.orm
+import alembic
+import alembic.config
 
 from utils import mkdir_p
 
@@ -58,12 +61,21 @@ class Cache(object):
         if 'sqlite://' in db_driver:
             db_path = db_driver[len('sqlite:///'):]
             mkdir_p(os.path.dirname(db_path))
+            initial_upgrade = False
+            if not os.path.exists(db_path):
+                initial_upgrade = True
             self.engine = sqlalchemy.create_engine('sqlite:///%s' % db_path)
+            if initial_upgrade:
+                self.upgrade_schema()
         else:
             self.engine = sqlalchemy.create_engine(db_driver)
-        Base.metadata.create_all(self.engine)
         self.Session.configure(bind=self.engine)
         self.session = self.Session()
+
+    def upgrade_schema(self):
+        pkg = pkg_resources.get_distribution('glacier')
+        cfg = alembic.config.Config(os.path.join(pkg.location, 'alembic.ini'))
+        alembic.command.upgrade(cfg, 'head')
 
     def add_archive(self, vault_name, name, size, archive):
         self.session.add(self.Archive(key=self.key,
