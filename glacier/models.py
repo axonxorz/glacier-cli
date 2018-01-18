@@ -73,8 +73,8 @@ class Cache(object):
         self.session = self.Session()
 
     def upgrade_schema(self):
-        pkg = pkg_resources.get_distribution('glacier')
-        cfg = alembic.config.Config(os.path.join(pkg.location, 'alembic.ini'))
+        alembic_ini = pkg_resources.resource_filename(__name__, 'alembic.ini')
+        cfg = alembic.config.Config(alembic_ini)
         alembic.command.upgrade(cfg, 'head')
 
     def add_archive(self, vault_name, name, size, archive):

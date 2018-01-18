@@ -60,5 +60,6 @@ setup(
     tests_require=tests_require,
     test_suite = 'nose.collector',
     packages=['glacier'],
-    entry_points={'console_scripts': ['glacier=glacier.cli:main']}
+    entry_points={'console_scripts': ['glacier=glacier.cli:main']},
+    package_data={'glacier': ['migrations/*', 'migrations/versions/*', 'alembic.ini']},
 )
