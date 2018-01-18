@@ -59,6 +59,6 @@ setup(
     install_requires=install_requires,
     tests_require=tests_require,
     test_suite = 'nose.collector',
-    py_modules=['glacier'],
+    packages=['glacier'],
     entry_points={'console_scripts': ['glacier=glacier.cli:main']}
 )
